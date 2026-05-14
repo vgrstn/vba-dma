@@ -4,7 +4,9 @@
 ![Architecture](https://img.shields.io/badge/Architecture-x86%20%7C%20x64-lightgrey)
 ![Rubberduck](https://img.shields.io/badge/Rubberduck-Ready-orange)
 
-Direct Memory Access standard module for VBA — Peek/Poke, array utilities, memory block operations, and Collection extensions.
+Direct Memory Access standard module for VBA.
+
+Peek/Poke, array utilities, memory block operations, and Collection extensions.
 
 Uses a **SafeArray construct** for fast memory access without extra stack frames, inspired by [Christian Buse's VBA-MemoryTools](https://github.com/cristianbuse/VBA-MemoryTools). Unlike LibMemory, a single shared construct handles all methods with nested call support via save/restore of the data pointer.
 
