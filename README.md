@@ -27,6 +27,8 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 |---|---|
 | `DMA.bas` | Source file with [Rubberduck](https://rubberduckvba.com/) annotations |
 | `DMA_WithAttributes.bas` | Ready-to-import version with VB attributes baked in — no Rubberduck required |
+| `Tests/TestDMA.bas` | 55 Rubberduck unit tests: every result is checked against plain VBA or the `RtlMoveMemory` API |
+| `Tests/BenchmarkDMA.bas` | Benchmarks for every public method; the results go to the Immediate window |
 
 ---
 
@@ -47,7 +49,7 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 | `PeekSng(address)` | `Single` | Reads a Single at a memory address |
 | `PeekVar(address)` | `Variant` | Reads a Variant at a memory address |
 | `PeekStr(address)` | `String` | Reads a String (BSTR) at a memory address |
-| `PeekObj(address)` | `Object` | Reads an Object reference at a memory address |
+| `PeekObj(address)` | `Object` | Returns a reference to the Object at `address` = `ObjPtr(obj)` |
 | `PokeBool(address, value)` | — | Writes a Boolean to a memory address |
 | `PokeByte(address, value)` | — | Writes a Byte to a memory address |
 | `PokeCur(address, value)` | — | Writes a Currency to a memory address |
@@ -58,8 +60,8 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 | `PokePtr(address, value)` | — | Writes a LongPtr to a memory address |
 | `PokeSng(address, value)` | — | Writes a Single to a memory address |
 | `PokeVar(address, value)` | — | Writes a Variant to a memory address |
-| `PokeStr(address, value)` | — | Writes a String (BSTR) to a memory address |
-| `PokeObj(address, value)` | — | Writes an Object reference to a memory address |
+| `PokeStr(address, value)` | — | Overwrites the String (BSTR) at `address` = `StrPtr(s)`, keeping its length |
+| `PokeObj(address, value)` | — | Sets the object variable at `address` = `VarPtr(var)` (not `ObjPtr`) |
 
 ### Array Utilities
 
@@ -83,8 +85,8 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 
 | Member | Description |
 |---|---|
-| `CopyMem(dest, src, NBytes)` | Copies a memory block; uses `RtlMoveMemory` above 1 MB |
-| `ZeroMem(address, NBytes)` | Zeroes a memory block; uses `RtlZeroMemory` above 10 KB |
+| `CopyMem(dest, src, NBytes)` | Copies a memory block; uses `RtlMoveMemory` from 1 MB and for overlapping blocks |
+| `ZeroMem(address, NBytes)` | Zeroes a memory block; uses `RtlZeroMemory` from 100 KB |
 | `DumpMem(address [, NBytes])` | Returns a formatted hexadecimal memory dump |
 | `OffsetPtr(address, offset)` | Safe signed pointer arithmetic |
 
@@ -95,7 +97,7 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 | `CollKeys(coll [, base])` | `String()` | All keys in the Collection as an array |
 | `CollKey(coll, pos)` | `String` | Key of the item at position `pos` |
 | `CollPos(coll, key)` | `Long` | Position of the item with `key` (0 if not found) |
-| `CollItem(coll, index)` *(Let)* | — | Assigns a new value to an item by index or key |
+| `CollItem(coll, index)` *(Let)* | — | Assigns a new value (also an object) to an item by index or key |
 
 ### Public Constants
 
@@ -134,59 +136,103 @@ Debug.Print c("greeting")         ' -> "hi"
 
 ## ⏱️ Performance
 
-### Array procedures (ms)
+Times in µs per call on x64, after subtracting the time of an empty loop. To measure your own machine, run `RunBenchmarks` from `Tests/BenchmarkDMA.bas` in the Immediate window (`RunBenchmarks 0.1` for a quick run, or a single table such as `BenchmarkCopyMem`).
+
+### Peek and Poke vs the `RtlMoveMemory` API
+
+| Method | DMA | API | | Method | DMA | API |
+|---|---|---|---|---|---|---|
+| `PeekBool` | 0.054 | 1.313 | | `PokeBool` | 0.055 | 1.260 |
+| `PeekByte` | 0.058 | 1.259 | | `PokeByte` | 0.056 | 1.259 |
+| `PeekCur` | 0.065 | 1.256 | | `PokeCur` | 0.055 | 1.258 |
+| `PeekDbl` | 0.054 | 1.273 | | `PokeDbl` | 0.055 | 1.259 |
+| `PeekInt` | 0.053 | 1.260 | | `PokeInt` | 0.056 | 1.262 |
+| `PeekLng` | 0.054 | 1.271 | | `PokeLng` | 0.056 | 1.275 |
+| `PeekLngLng` | 0.063 | 1.260 | | `PokeLngLng` | 0.055 | 1.259 |
+| `PeekPtr` | 0.064 | 1.267 | | `PokePtr` | 0.053 | 1.276 |
+| `PeekSng` | 0.058 | 1.316 | | `PokeSng` | 0.058 | 1.321 |
+| `PeekVar` | 0.098 | | | `PokeVar` | 0.076 | |
+| `PeekObj` | 0.075 | | | `PokeObj` | 0.103 | |
+
+A Peek or Poke through the SafeArray construct is more than 20× faster than a call through the API `Declare`.
+
+### Array procedures
 
 | Method | `Long(100)` | `Long()` | `Variant(100)` | `Variant()` |
 |---|---|---|---|---|
-| `ArrPtr` | 0.00009 | 0.00009 | 0.00009 | 0.00009 |
-| `ArrVarPtr` | 0.00008 | 0.00008 | 0.00008 | 0.00008 |
-| `ArrDataPtr` | 0.00018 | 0.00014 | 0.00013 | 0.00015 |
-| `ArrDims` | 0.00022 | 0.00013 | 0.00014 | 0.00013 |
+| `ArrPtr` | 0.098 | 0.099 | 0.100 | 0.101 |
+| `ArrVarPtr` | 0.090 | 0.096 | 0.107 | 0.095 |
+| `ArrDataPtr` | 0.202 | 0.138 | 0.201 | 0.145 |
+| `ArrDims` | 0.205 | 0.147 | 0.199 | 0.141 |
+| `IsArrayEmpty` | 0.305 | 0.154 | 0.314 | 0.147 |
 
-### `MidArr` vs `For` loop — `Long(1 To N)` (ms)
+### `MidArr` vs `For` loop — `Long(1 To N)`
 
 | Length | Get MidArr | For loop | Let MidArr | For loop |
 |---|---|---|---|---|
-| 0 | 0.00056 | 0.00363 | 0.00226 | 0.00445 |
-| 10 | 0.00057 | 0.00372 | 0.00267 | 0.00475 |
-| 100 | 0.00057 | 0.00624 | 0.00263 | 0.00858 |
-| 1,000 | 0.00061 | 0.03157 | 0.00282 | 0.04593 |
-| 10,000 | 0.00160 | 0.30272 | 0.00494 | 0.43832 |
-| 100,000 | 0.01241 | 2.97955 | 0.04005 | 4.33674 |
+| 1 | 0.554 | 0.076 | 1.208 | 0.023 |
+| 10 | 0.523 | 0.167 | 1.256 | 0.142 |
+| 100 | 0.531 | 1.167 | 1.290 | 1.471 |
+| 1,000 | 0.584 | 11.914 | 1.430 | 14.554 |
+| 10,000 | 2.174 | 119.889 | 3.978 | 158.646 |
+| 100,000 | 24.078 | 1111.456 | 32.144 | 1540.622 |
 
-### `CopyMem` vs `CopyMemory` API (ms)
+`MidArr` outperforms a `For` loop for simple types like `Long`. Both take significantly longer for Strings and Variants.
 
-| NBytes | CopyMem | CopyMemory |
-|---|---|---|
-| 10 | 0.00035 | 0.00152 |
-| 100 | 0.00032 | 0.00155 |
-| 1,000 | 0.00037 | 0.00161 |
-| 10,000 | 0.00053 | 0.00169 |
-| 100,000 | 0.00275 | 0.00302 |
-| 1,000,000 | 0.06700 | 0.06945 |
-| 10,000,000 | 0.70597 | 0.68546 ← break even |
+### `CopyMem` vs `CopyMemory` API
 
-### `ZeroMem` vs `ZeroMemory` API (ms)
+*LSet only* is the `LSet` method of `CopyMem` without the switch to the API; it is a private copy in the benchmark module.
 
-| NBytes | ZeroMem | ZeroMemory |
-|---|---|---|
-| 10 | 0.00021 | 0.00185 |
-| 100 | 0.00021 | 0.00163 |
-| 1,000 | 0.00034 | 0.00162 |
-| 10,000 | 0.00153 | 0.00172 ← break even |
-| 100,000 | 0.01506 | 0.00152 |
-| 1,000,000 | 0.19999 | 0.01422 |
-| 10,000,000 | 73.39400 | 0.73259 |
+| NBytes | CopyMem | LSet only | CopyMemory |
+|---|---|---|---|
+| 10 | 0.308 | 0.719 | 1.312 |
+| 100 | 0.319 | 0.684 | 1.272 |
+| 1,000 | 0.347 | 0.719 | 1.267 |
+| 10,000 | 0.544 | 0.868 | 1.450 |
+| 100,000 | 2.621 | 2.944 | 2.678 |
+| 1,000,000 | 42.390 | 40.784 | 41.663 |
+| 10,000,000 | 410.804 | 412.798 | 409.522 |
 
-### Collection extensions (ms) — item at position `Count\2`
+Below 10,000 bytes `CopyMem` is significantly faster than the API; for larger blocks they are about equal.
 
-| Count | `.Item i` | `.Item key` | `CollKey` | `CollPos` | `CollKeys` |
+### `ZeroMem` vs `ZeroMemory` API
+
+| NBytes | ZeroMem | LSet only | ZeroMemory |
+|---|---|---|---|
+| 10 | 0.206 | 0.436 | 2.425 |
+| 100 | 0.222 | 0.439 | 2.442 |
+| 1,000 | 0.331 | 0.534 | 2.444 |
+| 10,000 | 1.464 | 1.670 | 2.525 |
+| 100,000 | 3.351 | 14.738 | 3.239 ← switch to the API |
+| 1,000,000 | 13.272 | 149.121 | 13.279 |
+| 10,000,000 | 406.765 | 4716.247 | 414.412 |
+
+Below 10,000 bytes `ZeroMem` is significantly faster than the API.
+
+### Collection extensions — item at position `Count\2`
+
+| Count | `.Item pos` | `.Item key` | `CollKey` | `CollPos` | `CollKeys` |
 |---|---|---|---|---|---|
-| 10 | 0.0001 | 0.0002 | 0.0004 | 0.0011 | 0.0011 |
-| 100 | 0.0001 | 0.0002 | 0.0006 | 0.0049 | 0.0094 |
-| 1,000 | 0.0011 | 0.0005 | 0.0042 | 0.0449 | 0.0847 |
-| 10,000 | 0.0128 | 0.0008 | 0.0360 | 0.4129 | 0.8163 |
-| 100,000 | 0.1773 | 0.0010 | 0.3288 | 4.2147 | 9.8930 |
+| 10 | 0.075 | 0.193 | 0.308 | 0.860 | 1.006 |
+| 100 | 0.105 | 0.197 | 0.947 | 4.259 | 8.470 |
+| 1,000 | 1.049 | 0.565 | 7.002 | 37.279 | 82.787 |
+| 10,000 | 14.119 | 1.165 | 66.660 | 377.527 | 822.002 |
+| 100,000 | 249.116 | 1.758 | 661.063 | 3954.295 | 12143.242 |
+
+At 100,000 items the list traversals wait on main memory, so those times depend most on the machine.
+
+---
+
+## 🧪 Tests
+
+`Tests/TestDMA.bas` holds 55 [Rubberduck](https://rubberduckvba.com/) unit tests that cover every public member:
+
+- each Peek and Poke type with edge values, checking that neighbouring bytes stay untouched;
+- the array properties, `CreateArray`, `ArrElem`, `MidArr` and `CloneArray`;
+- `CopyMem` at all small sizes, with overlapping blocks and with large blocks;
+- `ZeroMem`, `DumpMem` and the Collection extensions.
+
+Expected values come from plain VBA or the `RtlMoveMemory` API, never from DMA itself. To run the tests without a reference to Rubberduck, set `#Const LateBinding = True`.
 
 ---
 
@@ -275,7 +321,7 @@ this.MetaData.pvData = VarPtr(address)   ' stack copy holds the BSTR pointer val
 PeekStr = this.Strings(0)               ' VBA follows the pointer to the string data
 ```
 
-`PokeStr` uses `LSet` to copy bytes in-place within the existing BSTR allocation — it does not change the string length or reallocate. This is correct for overwriting a live string in memory without leaking the original.
+`PokeStr` uses `LSet` to copy bytes in-place within the existing BSTR allocation — it does not change the string length or reallocate. This is correct for overwriting a live string in memory without leaking the original. Its `value` is passed `ByRef`: a `ByVal` String would be copied on every call, which made `PokeStr` ten times slower. `CollPos` takes its key `ByRef` for the same reason.
 
 ### `PeekObj` / `PokeObj` — object reference semantics
 
@@ -374,7 +420,7 @@ this.MetaData.pvData = VarPtr(BSTR(0))
 LSet this.Strings(0) = this.Strings(1)   ' bulk copy via LSet
 ```
 
-`LSet` on two same-size strings copies bytes in place without reallocation. The four-byte length prefix and any trailing odd byte are handled with direct typed reads and writes. Below 10 bytes, LSet is bypassed in favour of direct scalar copies (8-, 6-, 4-, 2-byte cases). Above 10⁶ bytes, `RtlMoveMemory` is faster (hardware-optimised memcpy) so the API is used instead.
+`LSet` on two same-size strings copies bytes in place without reallocation. The four-byte length prefix and any trailing odd byte are handled with direct typed reads and writes. Below 10 bytes, LSet is bypassed in favour of direct scalar copies (8-, 6-, 4-, 2-byte cases). From 10⁶ bytes the API is used; there both methods are equally fast. Overlapping blocks always go to `RtlMoveMemory`, because the `LSet` method writes to the source block and copies the odd last byte first.
 
 ### `ZeroMem` — `String$` trick with a lower threshold
 
@@ -386,7 +432,7 @@ this.MetaData.pvData = address
 this.Longs(0) = 0
 ```
 
-`String$(n, vbNullChar)` allocates a fresh VBA string of n null characters; `LSet` writes it to the fake BSTR target. Because VBA must allocate this string on every call, the overhead grows with block size — the crossover with `RtlZeroMemory` arrives much earlier than for `CopyMem`, at 10⁴ bytes rather than 10⁶. The timing tables confirm both thresholds empirically.
+`String$(n, vbNullChar)` allocates a fresh VBA string of n null characters; `LSet` writes it to the fake BSTR target. Because VBA must allocate this string on every call, the overhead grows with block size — the crossover with `RtlZeroMemory` arrives much earlier than for `CopyMem`: `ZeroMem` switches to the API from 10⁵ bytes rather than 10⁶. The *LSet only* columns in the timing tables show where each method stops paying off.
 
 ### `DumpMem` — pre-allocated string buffer
 
@@ -421,4 +467,4 @@ Flipping the sign bit before and after the addition converts the signed `LongPtr
 
 ## 📄 License
 
-MIT © 2025 Vincent van Geerestein
+MIT © 2025–2026 Vincent van Geerestein
