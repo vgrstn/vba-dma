@@ -243,10 +243,12 @@ Option Explicit
 ' Item key method uses a red-black tree to look up the double linked list node
 ' and is thus much faster for large collections than the Item method which has
 ' to traverse the list. CollKey is slower than the Item method because it uses
-' VB code rather than internal code. CollPos is much slower because it not only
-' has to traverse the linked list, but it also needs to compare the key with the
-' keys stored in the Collection. CollKeys has to traverse the whole linked list
-' and needs to allocate strings for all the Collection keys.
+' VB code rather than internal code. CollPos finds the node of the key in the
+' red-black tree and then counts the prev links back to the head, so its time
+' grows with the position of the item (for the middle item about 1.7 times the
+' time of CollKey). Without the tree it also compares every key it passes.
+' CollKeys has to traverse the whole linked list and needs to allocate strings
+' for all the Collection keys.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Compiler switches
