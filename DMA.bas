@@ -219,27 +219,48 @@ Option Explicit
 ' The Dictionary Class implements a rather primitive enumeration via an array of
 ' keys or items. The methods provided here neatly augment a VB Collection Class.
 '
-' All these methods are inherently "slow" as they require to traverse the double
-' linked list and in fact have similar performance challenges as for looking up
-' a Collection element by its position. I did not manage to crack the hash table
-' in order to get direct access to a node for a given key.
+' How a Collection finds a key was cracked by memory inspection (2026-11-07).
+' Besides the double linked list, the keyed nodes of a Collection form a
+' red-black tree in case-insensitive (vbTextCompare) order of the keys. This is
+' how coll.Item(key) finds a node so fast. A descent from the root of this tree
+' finds the node of a key in O(log n) steps instead of traversing the list.
+' Unkeyed nodes are not part of the tree. Duplicate keys are exactly the keys
+' that StrComp with vbTextCompare finds equal, e.g. "a" = "A" and "ss" = "ß".
+'
+' With #Const CollectionTree = True CollItem by key no longer depends on the
+' size of the Collection, and CollPos is about 4 times faster: it only counts
+' the prev links from the node back to the head, without string comparisons.
+' KeyExists no longer needs an error trap. The tree layout is undocumented and
+' has only been verified for x64, so the tree code only compiles for Win64.
+' Set the constant to False to use the double linked list for every method.
 '
 ' Collection with keyed items, item at position Count \ 2 (µs per call)
 ' Count     .Item pos     .Item key       CollKey       CollPos      CollKeys
-' 10            0.075         0.193         0.308         0.860         1.006
-' 100           0.105         0.197         0.947         4.259         8.470
-' 1,000         1.049         0.565         7.002        37.279        82.787
-' 10,000       14.119         1.165        66.660       377.527       822.002
-' 100,000     249.116         1.758       661.063      3954.295     12143.242
+' 10            0.076         0.206         0.326         0.651         1.047
+' 100           0.109         0.201         0.950         1.636         8.488
+' 1,000         0.953         0.515         7.797        12.538        83.716
+' 10,000       14.491         0.812        74.551       113.512       823.294
+' 100,000     246.426         1.574       623.216      1038.347     13687.674
 '
 ' The results are for an item at position Count\2 and all items have a key. The
-' Item key method uses a hash table to look up the double linked list node and
-' is thus much faster for large collections than the Item method which has to
-' traverse the list. CollKey is slower than the Item method because it uses
+' Item key method uses a red-black tree to look up the double linked list node
+' and is thus much faster for large collections than the Item method which has
+' to traverse the list. CollKey is slower than the Item method because it uses
 ' VB code rather than internal code. CollPos is much slower because it not only
 ' has to traverse the linked list, but it also needs to compare the key with the
 ' keys stored in the Collection. CollKeys has to traverse the whole linked list
 ' and needs to allocate strings for all the Collection keys.
+
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+' Compiler switches
+''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
+
+' The key index of a VB Collection was hacked with the help of Claude.
+' True: CollPos, CollItem by key and KeyExists find a keyed node through the
+' red-black tree of the Collection (x64 only, the x86 layout is not verified).
+' False: they traverse the double linked list, like CollKey and CollKeys.
+
+#Const CollectionTree = True
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Public declarations
@@ -353,6 +374,12 @@ Private Enum MEMOFFSET
     vbOffsetCollectionKey = 24          ' *key  (LongPtr)
     vbOffsetCollectionPrev = 32         ' *prev (LongPtr)
     vbOffsetCollectionNext = 40         ' *next (LongPtr)
+    ' The red-black tree of the keyed nodes in a Collection object.
+    vbOffsetCollectionRoot = 64         ' *root node (LongPtr) from ObjPtr(var)
+    vbOffsetCollectionNil = 72          ' *nil node (LongPtr) from ObjPtr(var)
+    vbOffsetCollectionParent = 48       ' *parent (LongPtr) from the node address
+    vbOffsetCollectionRight = 56        ' *right child (LongPtr) from the node address
+    vbOffsetCollectionLeft = 64         ' *left child (LongPtr) from the node address
     ' The memory offsets from the ArrPtr(var) address of a SafeArray
     vbOffsetArrayType = -4              ' VarType (Long) for FADF_HAVEVARTYPE = 1
     vbOffsetArraycDims = 0              ' number of dimensions (Integer)
@@ -1427,7 +1454,7 @@ Public Sub ZeroMem( _
     If address = vbNullPtr Then Err.Raise vbErrorInvalidProcedureCall
 
     ' The ZeroMemory API is faster above the (approximate) threshold.
-    Const Threshold As Long = 10 ^ 5
+    Const Threshold As Long = 2 * 10 ^ 4
     If NBytes >= Threshold Then
         ZeroMemory ByVal address, NBytes
         Exit Sub
@@ -1693,6 +1720,27 @@ Public Function CollPos( _
 ' Byref is used for speed. ByVal makes a unnecessary copy of the string.
 
     If coll.Count = 0 Then Err.Raise vbErrorInvalidProcedureCall, , "Collection is empty"
+
+#If CollectionTree And Win64 Then
+    Dim NodePtr As LongPtr: NodePtr = CollNode(coll, key)
+    If NodePtr = vbNullPtr Then Exit Function
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    ' Count the nodes from the node of the key back to the head of the list.
+    this.MetaData.cElements = 1
+    Dim i As Long
+    Do While NodePtr <> vbNullPtr
+        i = i + 1
+        this.MetaData.pvData = NodePtr + vbOffsetCollectionPrev
+        NodePtr = this.Pointers(0)
+    Loop
+    CollPos = i
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
+#Else
     If KeyExists(coll, key) = False Then Exit Function
 
     If this.MetaData.cDims = 0 Then InitializeConstruct
@@ -1715,6 +1763,7 @@ Public Function CollPos( _
     Next
     this.MetaData.cElements = Count
     this.MetaData.pvData = Data
+#End If
 
 End Function
 
@@ -1735,6 +1784,12 @@ Public Property Let CollItem( _
     Dim Data As LongPtr: Data = this.MetaData.pvData
     ' Traverse the double linked list until a matching item has been found.
     If VBA.VarType(index) = VBA.vbString Then
+#If CollectionTree And Win64 Then
+        Dim i As Long, NodePtr As LongPtr
+        NodePtr = CollNode(coll, CStr(index))
+        If NodePtr = vbNullPtr Then Err.Raise vbErrorInvalidProcedureCall
+        this.MetaData.cElements = 1
+#Else
         If KeyExists(coll, CStr(index)) = False Then Err.Raise vbErrorInvalidProcedureCall
         this.MetaData.cElements = 1
         this.MetaData.pvData = ObjPtr(coll) + vbOffsetCollectionHead
@@ -1747,6 +1802,7 @@ Public Property Let CollItem( _
             End If
             this.MetaData.pvData = NodePtr + vbOffsetCollectionNext
         Next
+#End If
     Else
         If index < 1 Or index > coll.Count Then Err.Raise vbErrorSubscriptOutOfRange
         this.MetaData.cElements = 1
@@ -1854,11 +1910,51 @@ Private Sub PokeSafeArray(ByVal address As LongPtr, ByRef value As SAFEARRAY)
 End Sub
 
 
+#If CollectionTree And Win64 Then
+'@Description "Returns the node address of a key in a VB Collection or vbNullPtr if not found."
+Private Function CollNode(ByVal coll As Collection, ByRef key As String) As LongPtr
+' The keyed nodes of a Collection form a red-black tree in vbTextCompare order of
+' the keys. A descent from the root finds the node in O(log n) steps.
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+    this.MetaData.pvData = ObjPtr(coll) + vbOffsetCollectionNil
+    Dim NilPtr As LongPtr: NilPtr = this.Pointers(0)
+    this.MetaData.pvData = ObjPtr(coll) + vbOffsetCollectionRoot
+    Dim NodePtr As LongPtr: NodePtr = this.Pointers(0)
+    Dim Order As Long
+    Do While NodePtr <> NilPtr
+        this.MetaData.pvData = NodePtr + vbOffsetCollectionKey
+        ' Collection keys are compared as case-insensitive.
+        Order = StrComp(key, this.Strings(0), VBA.vbTextCompare)
+        If Order = 0 Then
+            CollNode = NodePtr
+            Exit Do
+        ElseIf Order < 0 Then
+            this.MetaData.pvData = NodePtr + vbOffsetCollectionLeft
+        Else
+            this.MetaData.pvData = NodePtr + vbOffsetCollectionRight
+        End If
+        NodePtr = this.Pointers(0)
+    Loop
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
+
+End Function
+#End If
+
+
 '@Description "Returns True if a key exists in a VB Collection or False otherwise."
 Private Function KeyExists(ByVal coll As Collection, ByRef key As String) As Boolean
-' An error trap is required to check whether a key exists or not.
+' Without the red-black tree an error trap is required to check whether a key exists.
 ' Byref is used for speed. ByVal makes a unnecessary copy of the string.
 
+#If CollectionTree And Win64 Then
+    KeyExists = CollNode(coll, key) <> vbNullPtr
+#Else
     On Error GoTo ErrorHandler
     coll.Item key
     KeyExists = True
@@ -1873,5 +1969,6 @@ ErrorHandler:
     Case Else
         Err.Raise Err.Number
     End Select
+#End If
 
 End Function

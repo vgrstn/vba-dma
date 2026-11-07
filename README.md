@@ -15,7 +15,7 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 - **Peek/Poke** — read and write all intrinsic VBA types at any memory address
 - **Array utilities** — pointer, dimensions, element size, static/empty/allocated checks, base, element access, and array slicing
 - **Memory block ops** — `CopyMem`, `ZeroMem`, `DumpMem` with automatic API fallback above thresholds
-- **Collection extensions** — retrieve keys, positions, and update items by index or key
+- **Collection extensions** — retrieve keys, positions, and update items by index or key; with `#Const CollectionTree = True` (x64) key lookups use the Collection's own red-black tree
 - x86 / x64 compatible via `LongPtr` and `#If Win64` throughout
 - Pure VBA, Rubberduck-friendly annotations
 
@@ -86,7 +86,7 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 | Member | Description |
 |---|---|
 | `CopyMem(dest, src, NBytes)` | Copies a memory block; uses `RtlMoveMemory` from 1 MB and for overlapping blocks |
-| `ZeroMem(address, NBytes)` | Zeroes a memory block; uses `RtlZeroMemory` from 100 KB |
+| `ZeroMem(address, NBytes)` | Zeroes a memory block; uses `RtlZeroMemory` from 20 KB |
 | `DumpMem(address [, NBytes])` | Returns a formatted hexadecimal memory dump |
 | `OffsetPtr(address, offset)` | Safe signed pointer arithmetic |
 
@@ -96,8 +96,8 @@ Uses a **SafeArray construct** for fast memory access without extra stack frames
 |---|---|---|
 | `CollKeys(coll [, base])` | `String()` | All keys in the Collection as an array |
 | `CollKey(coll, pos)` | `String` | Key of the item at position `pos` |
-| `CollPos(coll, key)` | `Long` | Position of the item with `key` (0 if not found) |
-| `CollItem(coll, index)` *(Let)* | — | Assigns a new value (also an object) to an item by index or key |
+| `CollPos(coll, key)` | `Long` | Position of the item with `key` (0 if not found); tree lookup + count back to the head |
+| `CollItem(coll, index)` *(Let)* | — | Assigns a new value (also an object) to an item by index or key; by key in O(log n) with the tree |
 
 ### Public Constants
 
@@ -203,21 +203,33 @@ Below 10,000 bytes `CopyMem` is significantly faster than the API; for larger bl
 | 100 | 0.222 | 0.439 | 2.442 |
 | 1,000 | 0.331 | 0.534 | 2.444 |
 | 10,000 | 1.464 | 1.670 | 2.525 |
-| 100,000 | 3.351 | 14.738 | 3.239 ← switch to the API |
+| 100,000 | 3.351 | 14.738 | 3.239 |
 | 1,000,000 | 13.272 | 149.121 | 13.279 |
 | 10,000,000 | 406.765 | 4716.247 | 414.412 |
 
-Below 10,000 bytes `ZeroMem` is significantly faster than the API.
+Below 10,000 bytes `ZeroMem` is significantly faster than the API; the two cross at about 16 KB, so `ZeroMem` switches to the API from 20 KB.
 
 ### Collection extensions — item at position `Count\2`
 
 | Count | `.Item pos` | `.Item key` | `CollKey` | `CollPos` | `CollKeys` |
 |---|---|---|---|---|---|
-| 10 | 0.075 | 0.193 | 0.308 | 0.860 | 1.006 |
-| 100 | 0.105 | 0.197 | 0.947 | 4.259 | 8.470 |
-| 1,000 | 1.049 | 0.565 | 7.002 | 37.279 | 82.787 |
-| 10,000 | 14.119 | 1.165 | 66.660 | 377.527 | 822.002 |
-| 100,000 | 249.116 | 1.758 | 661.063 | 3954.295 | 12143.242 |
+| 10 | 0.076 | 0.206 | 0.326 | 0.651 | 1.047 |
+| 100 | 0.109 | 0.201 | 0.950 | 1.636 | 8.488 |
+| 1,000 | 0.953 | 0.515 | 7.797 | 12.538 | 83.716 |
+| 10,000 | 14.491 | 0.812 | 74.551 | 113.512 | 823.294 |
+| 100,000 | 246.426 | 1.574 | 623.216 | 1038.347 | 13687.674 |
+
+With `#Const CollectionTree = True`. With the tree switched off, `CollPos` takes 0.91 / 4.3 / 38 / 380 / 3,882 µs for the same counts.
+
+### `CollItem` by key — `CollectionTree` on and off
+
+| Count | Tree (`True`) | List walk (`False`) |
+|---|---|---|
+| 10 | 0.712 | 1.294 |
+| 100 | 0.712 | 6.173 |
+| 1,000 | 1.324 | 54.006 |
+| 10,000 | 1.885 | 524.154 |
+| 100,000 | 2.415 | 5455.259 |
 
 At 100,000 items the list traversals wait on main memory, so those times depend most on the machine.
 
@@ -232,7 +244,7 @@ At 100,000 items the list traversals wait on main memory, so those times depend 
 - `CopyMem` at all small sizes, with overlapping blocks and with large blocks;
 - `ZeroMem`, `DumpMem` and the Collection extensions.
 
-Expected values come from plain VBA or the `RtlMoveMemory` API, never from DMA itself. To run the tests without a reference to Rubberduck, set `#Const LateBinding = True`.
+Expected values come from plain VBA or the `RtlMoveMemory` API, never from DMA itself. To run the tests without a reference to Rubberduck, set `#Const LateBinding = True`. All 55 tests pass with `CollectionTree` both `True` and `False`.
 
 ---
 
@@ -452,7 +464,41 @@ Node: [Item: Variant (16/24 bytes)][Key: LongPtr→BSTR][Prev: LongPtr][Next: Lo
 
 Setting `pvData = NodePtr + vbOffsetCollectionKey` and reading `this.Strings(0)` follows the node's BSTR pointer directly — VBA treats the `LongPtr` at that offset as a BSTR pointer and reads the string. A node without a key has `vbNullPtr` at the key offset, so `this.Strings(0)` returns `""`.
 
-`CollKey` traverses from the head if `pos ≤ Count \ 2`, otherwise from the tail, halving worst-case traversal depth. `CollPos` has no equivalent optimisation because each node must be examined regardless of position. `CollKeys` allocates the result `String()` up front and fills it in one forward pass.
+`CollKey` traverses from the head if `pos ≤ Count \ 2`, otherwise from the tail, halving worst-case traversal depth. Without the tree, `CollPos` has no equivalent optimisation because each node must be examined regardless of position. `CollKeys` allocates the result `String()` up front and fills it in one forward pass.
+
+### Collection key index — a red-black tree
+
+Besides the doubly-linked list, the keyed nodes of a Collection form a **red-black tree** in case-insensitive (`vbTextCompare`) key order — this is how `coll.Item(key)` finds a node so fast. The layout was reconstructed by memory inspection (x64):
+
+```
+Collection object                          Keyed node (unkeyed nodes are list-only, 48 bytes)
++40  head   +48  tail                      +0  Item (Variant)   +24 Key (BSTR)
++64  root of the key tree                  +32 Prev             +40 Next
++72  nil pointer (= object + 80)           +48 Parent           +56 Right child
++80  nil node inside the object            +64 Left child       +72 Colour (1 = black, 0 = red)
+```
+
+An in-order walk of the tree returns the keys sorted by `StrComp(…, vbTextCompare)`, and the Collection rejects a second key as a duplicate (error 457) exactly when `StrComp` with `vbTextCompare` finds both keys equal, for example `"a"`/`"A"` and `"ss"`/`"ß"`.
+
+With `#Const CollectionTree = True` the private `CollNode` descends from the root to the node of a key in O(log n) steps:
+
+```vb
+Do While NodePtr <> NilPtr
+    this.MetaData.pvData = NodePtr + vbOffsetCollectionKey
+    Order = StrComp(key, this.Strings(0), VBA.vbTextCompare)
+    If Order = 0 Then
+        CollNode = NodePtr
+        Exit Do
+    ElseIf Order < 0 Then
+        this.MetaData.pvData = NodePtr + vbOffsetCollectionLeft
+    Else
+        this.MetaData.pvData = NodePtr + vbOffsetCollectionRight
+    End If
+    NodePtr = this.Pointers(0)
+Loop
+```
+
+`CollItem` by key writes straight to that node, `KeyExists` no longer needs an error trap, and `CollPos` counts the `Prev` links from the node back to the head without comparing any strings. The tree is only read, never changed. Its layout is undocumented and has only been verified for x64, so the tree code compiles only when `CollectionTree` is `True` **and** `Win64`; otherwise every method uses the doubly-linked list.
 
 ### `OffsetPtr` — XOR-based signed arithmetic
 
