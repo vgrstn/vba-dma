@@ -142,40 +142,53 @@ Times in µs per call on x64, after subtracting the time of an empty loop. To me
 
 | Method | DMA | API | | Method | DMA | API |
 |---|---|---|---|---|---|---|
-| `PeekBool` | 0.054 | 1.313 | | `PokeBool` | 0.055 | 1.260 |
-| `PeekByte` | 0.058 | 1.259 | | `PokeByte` | 0.056 | 1.259 |
-| `PeekCur` | 0.065 | 1.256 | | `PokeCur` | 0.055 | 1.258 |
-| `PeekDbl` | 0.054 | 1.273 | | `PokeDbl` | 0.055 | 1.259 |
-| `PeekInt` | 0.053 | 1.260 | | `PokeInt` | 0.056 | 1.262 |
-| `PeekLng` | 0.054 | 1.271 | | `PokeLng` | 0.056 | 1.275 |
-| `PeekLngLng` | 0.063 | 1.260 | | `PokeLngLng` | 0.055 | 1.259 |
-| `PeekPtr` | 0.064 | 1.267 | | `PokePtr` | 0.053 | 1.276 |
-| `PeekSng` | 0.058 | 1.316 | | `PokeSng` | 0.058 | 1.321 |
-| `PeekVar` | 0.098 | | | `PokeVar` | 0.076 | |
-| `PeekObj` | 0.075 | | | `PokeObj` | 0.103 | |
+| `PeekBool` | 0.062 | 1.334 |  | `PokeBool` | 0.056 | 1.369 |
+| `PeekByte` | 0.057 | 1.323 |  | `PokeByte` | 0.056 | 1.337 |
+| `PeekCur` | 0.064 | 1.327 |  | `PokeCur` | 0.054 | 1.291 |
+| `PeekDbl` | 0.055 | 1.286 |  | `PokeDbl` | 0.052 | 1.438 |
+| `PeekInt` | 0.076 | 1.370 |  | `PokeInt` | 0.055 | 1.292 |
+| `PeekLng` | 0.054 | 1.280 |  | `PokeLng` | 0.058 | 1.280 |
+| `PeekLngLng` | 0.056 | 1.284 |  | `PokeLngLng` | 0.055 | 1.262 |
+| `PeekPtr` | 0.058 | 1.282 |  | `PokePtr` | 0.056 | 1.278 |
+| `PeekSng` | 0.055 | 1.263 |  | `PokeSng` | 0.058 | 1.281 |
+| `PeekVar` | 0.094 |  |  | `PokeVar` | 0.065 |  |
+| `PeekObj` | 0.076 |  |  | `PokeObj` | 0.100 |  |
 
 A Peek or Poke through the SafeArray construct is more than 20× faster than a call through the API `Declare`.
+
+### `PeekStr` and `PokeStr` by string length
+
+| Chars | PeekStr | PokeStr | VBA `a = b` |
+|---|---|---|---|
+| 10 | 0.094 | 0.097 | 0.024 |
+| 100 | 0.099 | 0.106 | 0.026 |
+| 1,000 | 0.102 | 0.147 | 0.031 |
+| 10,000 | 0.372 | 0.831 | 0.303 |
+
+Up to 1,000 characters both cost about 0.1 µs; for longer strings the copy of the characters dominates, as it does for `a = b`.
 
 ### Array procedures
 
 | Method | `Long(100)` | `Long()` | `Variant(100)` | `Variant()` |
 |---|---|---|---|---|
-| `ArrPtr` | 0.098 | 0.099 | 0.100 | 0.101 |
-| `ArrVarPtr` | 0.090 | 0.096 | 0.107 | 0.095 |
-| `ArrDataPtr` | 0.202 | 0.138 | 0.201 | 0.145 |
-| `ArrDims` | 0.205 | 0.147 | 0.199 | 0.141 |
-| `IsArrayEmpty` | 0.305 | 0.154 | 0.314 | 0.147 |
+| `ArrPtr` | 0.093 | 0.099 | 0.101 | 0.103 |
+| `ArrVarPtr` | 0.082 | 0.081 | 0.082 | 0.090 |
+| `ArrDataPtr` | 0.109 | 0.102 | 0.113 | 0.097 |
+| `ArrDims` | 0.113 | 0.104 | 0.119 | 0.107 |
+| `IsArrayEmpty` | 0.146 | 0.100 | 0.144 | 0.112 |
+
+`ArrDataPtr`, `ArrDims`, `ArrElemSize`, `IsArrayStatic`, `IsArrayAllocated` and `IsArrayEmpty` read the SafeArray inline, within one save and restore of the construct instead of a call of `ArrPtr` plus a Peek, so they cost little more than `ArrPtr` itself (`ArrDataPtr` 0.194 → 0.11 µs).
 
 ### `MidArr` vs `For` loop — `Long(1 To N)`
 
 | Length | Get MidArr | For loop | Let MidArr | For loop |
 |---|---|---|---|---|
-| 1 | 0.554 | 0.076 | 1.208 | 0.023 |
-| 10 | 0.523 | 0.167 | 1.256 | 0.142 |
-| 100 | 0.531 | 1.167 | 1.290 | 1.471 |
-| 1,000 | 0.584 | 11.914 | 1.430 | 14.554 |
-| 10,000 | 2.174 | 119.889 | 3.978 | 158.646 |
-| 100,000 | 24.078 | 1111.456 | 32.144 | 1540.622 |
+| 1 | 0.561 | 0.074 | 1.123 | 0.023 |
+| 10 | 0.541 | 0.174 | 1.228 | 0.153 |
+| 100 | 0.533 | 1.165 | 1.203 | 1.550 |
+| 1,000 | 0.591 | 11.165 | 1.359 | 13.349 |
+| 10,000 | 2.032 | 115.876 | 3.984 | 151.566 |
+| 100,000 | 39.644 | 1135.267 | 35.211 | 1522.389 |
 
 `MidArr` outperforms a `For` loop for simple types like `Long`. Both take significantly longer for Strings and Variants.
 
@@ -185,13 +198,13 @@ A Peek or Poke through the SafeArray construct is more than 20× faster than a c
 
 | NBytes | CopyMem | LSet only | CopyMemory |
 |---|---|---|---|
-| 10 | 0.308 | 0.719 | 1.312 |
-| 100 | 0.319 | 0.684 | 1.272 |
-| 1,000 | 0.347 | 0.719 | 1.267 |
-| 10,000 | 0.544 | 0.868 | 1.450 |
-| 100,000 | 2.621 | 2.944 | 2.678 |
-| 1,000,000 | 42.390 | 40.784 | 41.663 |
-| 10,000,000 | 410.804 | 412.798 | 409.522 |
+| 10 | 0.321 | 0.707 | 1.334 |
+| 100 | 0.344 | 0.730 | 1.319 |
+| 1,000 | 0.364 | 0.717 | 1.333 |
+| 10,000 | 0.568 | 0.910 | 1.523 |
+| 100,000 | 2.801 | 3.189 | 2.925 |
+| 1,000,000 | 44.547 | 42.344 | 42.539 |
+| 10,000,000 | 426.702 | 421.671 | 432.533 |
 
 Below 10,000 bytes `CopyMem` is significantly faster than the API; for larger blocks they are about equal.
 
@@ -199,13 +212,13 @@ Below 10,000 bytes `CopyMem` is significantly faster than the API; for larger bl
 
 | NBytes | ZeroMem | LSet only | ZeroMemory |
 |---|---|---|---|
-| 10 | 0.206 | 0.436 | 2.425 |
-| 100 | 0.222 | 0.439 | 2.442 |
-| 1,000 | 0.331 | 0.534 | 2.444 |
-| 10,000 | 1.464 | 1.670 | 2.525 |
-| 100,000 | 3.351 | 14.738 | 3.239 |
-| 1,000,000 | 13.272 | 149.121 | 13.279 |
-| 10,000,000 | 406.765 | 4716.247 | 414.412 |
+| 10 | 0.210 | 0.420 | 2.546 |
+| 100 | 0.229 | 0.458 | 2.547 |
+| 1,000 | 0.348 | 0.561 | 2.546 |
+| 10,000 | 1.551 | 1.771 | 2.662 |
+| 100,000 | 3.512 | 14.514 | 3.534 |
+| 1,000,000 | 15.495 | 162.584 | 13.851 |
+| 10,000,000 | 413.694 | 5575.594 | 413.643 |
 
 Below 10,000 bytes `ZeroMem` is significantly faster than the API; the two cross at about 16 KB, so `ZeroMem` switches to the API from 20 KB.
 
@@ -213,11 +226,11 @@ Below 10,000 bytes `ZeroMem` is significantly faster than the API; the two cross
 
 | Count | `.Item pos` | `.Item key` | `CollKey` | `CollPos` | `CollKeys` |
 |---|---|---|---|---|---|
-| 10 | 0.076 | 0.206 | 0.326 | 0.651 | 1.047 |
-| 100 | 0.109 | 0.201 | 0.950 | 1.636 | 8.488 |
-| 1,000 | 0.953 | 0.515 | 7.797 | 12.538 | 83.716 |
-| 10,000 | 14.491 | 0.812 | 74.551 | 113.512 | 823.294 |
-| 100,000 | 246.426 | 1.574 | 623.216 | 1038.347 | 13687.674 |
+| 10 | 0.081 | 0.204 | 0.322 | 0.708 | 1.045 |
+| 100 | 0.111 | 0.261 | 0.889 | 1.693 | 8.725 |
+| 1,000 | 0.996 | 0.557 | 7.025 | 12.843 | 84.570 |
+| 10,000 | 13.702 | 1.067 | 73.699 | 119.520 | 892.937 |
+| 100,000 | 256.195 | 1.753 | 652.811 | 1137.468 | 15426.911 |
 
 With `#Const CollectionTree = True`. With the tree switched off, `CollPos` takes 0.91 / 4.3 / 38 / 380 / 3,882 µs for the same counts.
 
@@ -333,7 +346,7 @@ this.MetaData.pvData = VarPtr(address)   ' stack copy holds the BSTR pointer val
 PeekStr = this.Strings(0)               ' VBA follows the pointer to the string data
 ```
 
-`PokeStr` uses `LSet` to copy bytes in-place within the existing BSTR allocation — it does not change the string length or reallocate. This is correct for overwriting a live string in memory without leaking the original. Its `value` is passed `ByRef`: a `ByVal` String would be copied on every call, which made `PokeStr` ten times slower. `CollPos` takes its key `ByRef` for the same reason.
+`PokeStr` uses `LSet` to copy bytes in-place within the existing BSTR allocation — it does not change the string length or reallocate. This is correct for overwriting a live string in memory without leaking the original. Its `value` is passed `ByRef As Variant`: a `ByVal` String would be copied on every call, which made `PokeStr` ten times slower, and a `ByRef` String gives a compile error for a Variant variable at the caller. A value that is not a String is converted to text, as `CStr` does. `CollPos` takes its key `ByRef As Variant` for the same reasons; a number is the key `"3"`, never the third item.
 
 ### `PeekObj` / `PokeObj` — object reference semantics
 
@@ -449,10 +462,10 @@ this.Longs(0) = 0
 ### `DumpMem` — pre-allocated string buffer
 
 ```vb
-Dim Buffer As String: Buffer = Space$((NLines + 3) * (Width + 1))
+Dim Buffer As String: Buffer = Space$((NLines + 3) * (Width + 2))
 ```
 
-The entire output string is allocated in one shot, then filled with `Mid$` assignments. VBA's string concatenation (`&`) allocates a new BSTR on every operation — for a 256-byte dump that would be hundreds of allocations. Writing into a fixed-size buffer via `Mid$` is O(1) per write with no intermediate allocations. After the loop, any byte positions beyond `NBytes` in the final line are overwritten with spaces to erase the pre-allocated padding.
+The entire output string is allocated in one shot, then filled with `Mid$` assignments. VBA's string concatenation (`&`) allocates a new BSTR on every operation — for a 256-byte dump that would be hundreds of allocations. Writing into a fixed-size buffer via `Mid$` is O(1) per write with no intermediate allocations. After the loop, any byte positions beyond `NBytes` in the final line are overwritten with spaces to erase the pre-allocated padding. Every line ends with a `vbCrLf` of 2 characters, so each line takes `Width + 2` characters and the write position advances by 2 after it.
 
 ### Collection extensions — doubly-linked list traversal
 
@@ -498,7 +511,7 @@ Do While NodePtr <> NilPtr
 Loop
 ```
 
-`CollItem` by key writes straight to that node, `KeyExists` no longer needs an error trap, and `CollPos` counts the `Prev` links from the node back to the head without comparing any strings. The tree is only read, never changed. Its layout is undocumented and has only been verified for x64, so the tree code compiles only when `CollectionTree` is `True` **and** `Win64`; otherwise every method uses the doubly-linked list.
+`CollItem` by key writes straight to that node, no error trap (`KeyExists`) is needed, and `CollPos` counts the `Prev` links from the node back to the head without comparing any strings. The tree is only read, never changed. Its layout is undocumented and has only been verified for x64, so the tree code compiles only when `CollectionTree` is `True` **and** `Win64`; otherwise every method uses the doubly-linked list.
 
 ### `OffsetPtr` — XOR-based signed arithmetic
 
@@ -508,6 +521,17 @@ OffsetPtr = (address Xor SignBitMask) + Offset Xor SignBitMask
 ```
 
 Flipping the sign bit before and after the addition converts the signed `LongPtr` to behave as unsigned for the arithmetic, preventing overflow when addresses exceed `&H7FFFFFFF` (x86) or `&H7FFFFFFFFFFFFFFF` (x64). For ordinary pointer offsets within a single object, plain `+` would suffice — `OffsetPtr` is provided for the edge cases where addresses in the high half of the address space are involved.
+
+---
+
+## 📝 Changes
+
+**2026-11-10**
+- Fixed: `DumpMem` wrote only a CR at the end of every line (the LF of each `vbCrLf` was overwritten by the next line).
+- Faster: the array properties read the SafeArray inline (`ArrDataPtr` 0.194 → 0.11 µs).
+- Changed: `PokeStr` and `CollPos` take a `ByRef Variant`, so any variable can be passed; `KeyExists` is only compiled without the key tree and takes its key `ByVal As String`, so a number is a key, not a position.
+- The memory offsets are grouped per object (Variant, BSTR, SafeArray, Collection, Collection node); the 32-bit key-tree offsets are inferred and commented out.
+- New timings from a fresh benchmark run.
 
 ---
 

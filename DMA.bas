@@ -37,7 +37,7 @@ Option Explicit
 ' E-mail: vincent@vangeerestein.com
 ' Description: Direct Memory Access Module.
 ' Add-in: RubberDuck (https://rubberduckvba.com/)
-' Version: 2026.11.09
+' Version: 2026.11.10
 '
 ' This module implements Peek and Poke methods for intrinsic data types as well
 ' as a set of auxiliary methods for arrays, collections and memory blocks.
@@ -91,28 +91,38 @@ Option Explicit
 '
 ' Peek and Poke, 1,000,000 calls (탎 per call)
 ' Method          DMA           API
-' PeekBool      0.054         1.313
-' PokeBool      0.055         1.260
-' PeekByte      0.058         1.259
-' PokeByte      0.056         1.259
-' PeekCur       0.065         1.256
-' PokeCur       0.055         1.258
-' PeekDbl       0.054         1.273
-' PokeDbl       0.055         1.259
-' PeekInt       0.053         1.260
-' PokeInt       0.056         1.262
-' PeekLng       0.054         1.271
-' PokeLng       0.056         1.275
-' PeekLngLng    0.063         1.260
-' PokeLngLng    0.055         1.259
-' PeekPtr       0.064         1.267
-' PokePtr       0.053         1.276
-' PeekSng       0.058         1.316
-' PokeSng       0.058         1.321
-' PeekVar       0.098
-' PokeVar       0.076
-' PeekObj       0.075
-' PokeObj       0.103
+' PeekBool      0.062         1.334
+' PokeBool      0.056         1.369
+' PeekByte      0.057         1.323
+' PokeByte      0.056         1.337
+' PeekCur       0.064         1.327
+' PokeCur       0.054         1.291
+' PeekDbl       0.055         1.286
+' PokeDbl       0.052         1.438
+' PeekInt       0.076         1.370
+' PokeInt       0.055         1.292
+' PeekLng       0.054         1.280
+' PokeLng       0.058         1.280
+' PeekLngLng    0.056         1.284
+' PokeLngLng    0.055         1.262
+' PeekPtr       0.058         1.282
+' PokePtr       0.056         1.278
+' PeekSng       0.055         1.263
+' PokeSng       0.058         1.281
+' PeekVar       0.094
+' PokeVar       0.065
+' PeekObj       0.076
+' PokeObj       0.100
+'
+' PeekStr and PokeStr by string length (탎 per call)
+' Chars         PeekStr       PokeStr     VBA a = b
+' 10            0.094         0.097         0.024
+' 100           0.099         0.106         0.026
+' 1,000         0.102         0.147         0.031
+' 10,000        0.372         0.831         0.303
+'
+' PeekStr and PokeStr cost about 0.1 탎 up to 1,000 characters; for longer
+' strings the copy of the characters dominates, as it does for a = b.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Methods and properties for arrays
@@ -141,20 +151,24 @@ Option Explicit
 '
 ' Array methods, 1,000,000 calls (탎 per call)
 ' Method    Long(100)        Long()   Variant(100)    Variant()
-' ArrPtr        0.098         0.099         0.100         0.101
-' ArrVarPtr     0.090         0.096         0.107         0.095
-' ArrDataPtr    0.202         0.138         0.201         0.145
-' ArrDims       0.205         0.147         0.199         0.141
-' IsArrayEmpty  0.305         0.154         0.314         0.147
+' ArrPtr        0.093         0.099         0.101         0.103
+' ArrVarPtr     0.082         0.081         0.082         0.090
+' ArrDataPtr    0.109         0.102         0.113         0.097
+' ArrDims       0.113         0.104         0.119         0.107
+' IsArrayEmpty  0.146         0.100         0.144         0.112
+'
+' ArrDataPtr, ArrDims and IsArrayEmpty read the SafeArray inline, within one
+' save and restore of the construct (no call of ArrPtr and Peek), so they cost
+' little more than ArrPtr itself.
 '
 ' MidArr for Long(1 To Length) (탎 per call)
 ' Length   Get MidArr      For loop    Let MidArr      For loop
-' 1             0.554         0.076         1.208         0.023
-' 10            0.523         0.167         1.256         0.142
-' 100           0.531         1.167         1.290         1.471
-' 1,000         0.584        11.914         1.430        14.554
-' 10,000        2.174       119.889         3.978       158.646
-' 100,000      24.078      1111.456        32.144      1540.622
+' 1             0.561         0.074         1.123         0.023
+' 10            0.541         0.174         1.228         0.153
+' 100           0.533         1.165         1.203         1.550
+' 1,000         0.591        11.165         1.359        13.349
+' 10,000        2.032       115.876         3.984       151.566
+' 100,000      39.644      1135.267        35.211      1522.389
 '
 ' MidArr outperforms for loop for simple types like Long. MidArr as well as a
 ' For loop take significant longer for complex types i.e. Strings and Variants.
@@ -174,25 +188,25 @@ Option Explicit
 '
 ' CopyMem, its LSet method alone and the CopyMemory API (탎 per call)
 ' NBytes      CopyMem     LSet only    CopyMemory
-' 10            0.308         0.719         1.312
-' 100           0.319         0.684         1.272
-' 1,000         0.347         0.719         1.267
-' 10,000        0.544         0.868         1.450
-' 100,000       2.621         2.944         2.678
-' 1,000,000    42.390        40.784        41.663
-' 10,000,000  410.804       412.798       409.522
+' 10            0.321         0.707         1.334
+' 100           0.344         0.730         1.319
+' 1,000         0.364         0.717         1.333
+' 10,000        0.568         0.910         1.523
+' 100,000       2.801         3.189         2.925
+' 1,000,000    44.547        42.344        42.539
+' 10,000,000  426.702       421.671       432.533
 '
 ' Below blocks of 10,000 bytes CopyMem is significant faster than the API.
 '
 ' ZeroMem, its LSet method alone and the ZeroMemory API (탎 per call)
 ' NBytes      ZeroMem     LSet only    ZeroMemory
-' 10            0.206         0.436         2.425
-' 100           0.222         0.439         2.442
-' 1,000         0.331         0.534         2.444
-' 10,000        1.464         1.670         2.525
-' 100,000       3.351        14.738         3.239 <- Lset switch to API.
-' 1,000,000    13.272       149.121        13.279
-' 10,000,000  406.765      4716.247       414.412
+' 10            0.210         0.420         2.546
+' 100           0.229         0.458         2.547
+' 1,000         0.348         0.561         2.546
+' 10,000        1.551         1.771         2.662
+' 100,000       3.512        14.514         3.534 <- Lset switch to API.
+' 1,000,000    15.495       162.584        13.851
+' 10,000,000  413.694      5575.594       413.643
 '
 ' Below blocks of 10,000 bytes ZeroMem is significant faster than the API.
 '
@@ -230,17 +244,17 @@ Option Explicit
 ' With #Const CollectionTree = True CollItem by key no longer depends on the
 ' size of the Collection, and CollPos is about 4 times faster: it only counts
 ' the prev links from the node back to the head, without string comparisons.
-' KeyExists no longer needs an error trap. The tree layout is undocumented and
+' No error trap (KeyExists) is needed. The tree layout is undocumented and
 ' has only been verified for x64, so the tree code only compiles for Win64.
 ' Set the constant to False to use the double linked list for every method.
 '
 ' Collection with keyed items, item at position Count \ 2 (탎 per call)
 ' Count     .Item pos     .Item key       CollKey       CollPos      CollKeys
-' 10            0.076         0.206         0.326         0.651         1.047
-' 100           0.109         0.201         0.950         1.636         8.488
-' 1,000         0.953         0.515         7.797        12.538        83.716
-' 10,000       14.491         0.812        74.551       113.512       823.294
-' 100,000     246.426         1.574       623.216      1038.347     13687.674
+' 10            0.081         0.204         0.322         0.708         1.045
+' 100           0.111         0.261         0.889         1.693         8.725
+' 1,000         0.996         0.557         7.025        12.843        84.570
+' 10,000       13.702         1.067        73.699       119.520       892.937
+' 100,000     256.195         1.753       652.811      1137.468     15426.911
 '
 ' The results are for an item at position Count\2 and all items have a key. The
 ' Item key method uses a red-black tree to look up the double linked list node
@@ -258,11 +272,14 @@ Option Explicit
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 
 ' The key index of a VB Collection was hacked with the help of Claude.
-' True: CollPos, CollItem by key and KeyExists find a keyed node through the
-' red-black tree of the Collection (x64 only, the x86 layout is not verified).
-' False: they traverse the double linked list, like CollKey and CollKeys.
+' True: the node of a key is found through the red-black tree of the Collection
+' in O(log n) steps (CollPos, CollItem by key; x64 only, the x86 layout is not
+' verified). False: the double linked list is traversed, comparing the key of
+' every node it passes in O(n) steps (CollPos, CollItem by key via KeyExists),
+' like CollKey and CollKeys.
 
 #Const CollectionTree = True
+
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Public declarations
@@ -356,58 +373,80 @@ Private Enum VARSIZE
 #End If
 End Enum
 
-' The memory offsets for intrinsic data types (implementation dependent).
-Private Enum MEMOFFSET
-    ' The memory offsets from the VarPtr(var) address of a Variant.
+' Memory layouts (implementation dependent).
+' Each Enum holds the offsets from the address of one kind of object.
+
+' A Variant, from VarPtr(var).
+Private Enum VARIANTOFFSET
     vbOffsetVariantType = 0             ' type (Integer)
     vbOffsetVariantDecimal = 2          ' data (Decimal only - 14 bytes)
-    vbOffsetVariantData = 8             ' *data (LongPtr) or data
-    ' The memory offset from the StrPtr(var) address of a BSTR.
+    vbOffsetVariantData = 8             ' data or *data (LongPtr)
+End Enum
+
+' A BSTR, from StrPtr(var).
+Private Enum BSTROFFSET
     vbOffsetStringLenB = -4             ' number of bytes (Long) (= LenB)
-#If Win64 Then
-    ' The memory offsets from the ObjPtr(var) address of a Collection.
-    vbOffsetCollectionvTable = 0        ' *vTable (see COM)
-    vbOffsetCollectionnRef = 24         ' nref (Long)
-    vbOffsetCollectionCount = 28        ' count (Long)
-    vbOffsetCollectionHead = 40         ' *head (LongPtr)
-    vbOffsetCollectionTail = 48         ' *tail (LongPtr)
-    ' The memory offsets from the node address in a Collection object.
-    vbOffsetCollectionItem = 0          ' item (Variant)
-    vbOffsetCollectionKey = 24          ' *key  (LongPtr)
-    vbOffsetCollectionPrev = 32         ' *prev (LongPtr)
-    vbOffsetCollectionNext = 40         ' *next (LongPtr)
-    ' The red-black tree of the keyed nodes in a Collection object.
-    vbOffsetCollectionRoot = 64         ' *root node (LongPtr) from ObjPtr(var)
-    vbOffsetCollectionNil = 72          ' *nil node (LongPtr) from ObjPtr(var)
-    vbOffsetCollectionParent = 48       ' *parent (LongPtr) from the node address
-    vbOffsetCollectionRight = 56        ' *right child (LongPtr) from the node address
-    vbOffsetCollectionLeft = 64         ' *left child (LongPtr) from the node address
-    ' The memory offsets from the ArrPtr(var) address of a SafeArray
+End Enum
+
+' A SafeArray, from ArrPtr(var).
+Private Enum SAFEARRAYOFFSET
     vbOffsetArrayType = -4              ' VarType (Long) for FADF_HAVEVARTYPE = 1
     vbOffsetArraycDims = 0              ' number of dimensions (Integer)
     vbOffsetArrayfFeatures = 2          ' flags (Integer)
     vbOffsetArraycbElements = 4         ' element size (Long)
     vbOffsetArraycLocks = 8             ' lock count (Long)
-    ' For x64 bits 12-15 are not used.
-    vbOffsetArraypvData = 16            ' *data (LongPtr)
-    vbOffsetArrayrgsaBound = 24         ' cElements, lLbound pairs (Long()).
+#If Win64 Then
+    vbOffsetArraypvData = 16            ' *data (LongPtr); bytes 12-15 are not used
+    vbOffsetArrayrgsaBound = 24         ' cElements, lLbound pairs (Long())
 #Else
-    vbOffsetCollectionvTable = 0
+    vbOffsetArraypvData = 12
+    vbOffsetArrayrgsaBound = 16
+#End If
+End Enum
+
+' A VB Collection, from ObjPtr(coll).
+Private Enum COLLECTIONOFFSET
+    vbOffsetCollectionvTable = 0        ' *vTable (see COM)
+#If Win64 Then
+    vbOffsetCollectionnRef = 24         ' reference count (Long)
+    vbOffsetCollectionCount = 28        ' number of items (Long)
+    vbOffsetCollectionHead = 40         ' *first node (LongPtr)
+    vbOffsetCollectionTail = 48         ' *last node (LongPtr)
+    vbOffsetCollectionRoot = 64         ' *root node of the key tree (LongPtr)
+    vbOffsetCollectionNil = 72          ' *nil node of the key tree (LongPtr)
+#Else
     vbOffsetCollectionnRef = 12
     vbOffsetCollectionCount = 16
     vbOffsetCollectionHead = 24
     vbOffsetCollectionTail = 28
-    vbOffsetCollectionItem = 0
+' The key tree offsets for 32 bits, inferred slot by slot from the 64-bit
+' layout but not verified (CollectionTree is only used on 64 bits):
+'   vbOffsetCollectionRoot = 36
+'   vbOffsetCollectionNil = 40
+#End If
+End Enum
+
+' A node of a VB Collection, from the node address. The nodes form a doubly
+' linked list in insertion order; the nodes with a key also form a red-black
+' tree.
+Private Enum COLLECTIONNODEOFFSET
+    vbOffsetCollectionItem = 0          ' item (Variant)
+#If Win64 Then
+    vbOffsetCollectionKey = 24          ' *key (LongPtr)
+    vbOffsetCollectionPrev = 32         ' *previous node (LongPtr)
+    vbOffsetCollectionNext = 40         ' *next node (LongPtr)
+    vbOffsetCollectionParent = 48       ' *parent in the key tree (LongPtr)
+    vbOffsetCollectionRight = 56        ' *right child in the key tree (LongPtr)
+    vbOffsetCollectionLeft = 64         ' *left child in the key tree (LongPtr)
+#Else
     vbOffsetCollectionKey = 16
     vbOffsetCollectionPrev = 20
     vbOffsetCollectionNext = 24
-    vbOffsetArrayType = -4
-    vbOffsetArraycDims = 0
-    vbOffsetArrayfFeatures = 2
-    vbOffsetArraycbElements = 4
-    vbOffsetArraycLocks = 8
-    vbOffsetArraypvData = 12
-    vbOffsetArrayrgsaBound = 16
+' The key tree offsets for 32 bits, inferred slot by slot from the 64-bit
+' layout but not verified (CollectionTree is only used on 64 bits):
+'   vbOffsetCollectionParent = 28
+'   vbOffsetCollectionRight = 32
+'   vbOffsetCollectionLeft = 36
 #End If
 End Enum
 
@@ -856,9 +895,15 @@ End Function
 
 '@Description "Copies a String to a memory address."
 '@Ignore ParameterCanBeByVal
-Public Sub PokeStr(ByVal address As LongPtr, ByRef value As String)
+Public Sub PokeStr(ByVal address As LongPtr, ByRef value As Variant)
 ' Address is a BSTR address (StrPtr).
-' Byref is used for speed. ByVal makes a unnecessary copy of the string.
+' ByRef Variant: no copy of the string, and any variable can be passed (a ByRef
+' String gives a compile error for a Variant variable).
+' A value that is not a String is converted to text by LSet, as CStr does: 42
+' becomes "42", 1.5 becomes "1,5" with a comma as decimal separator. Null
+' raises error 94, an object or an array error 13. Like the other Poke
+' routines, the value is not checked. As with LSet, the text is padded with
+' spaces or cut off to the length of the BSTR at the address.
 
     If this.MetaData.cDims = 0 Then InitializeConstruct
 
@@ -962,12 +1007,35 @@ End Function
 '@Description "Returns the address of the stored data of an array."
 Public Function ArrDataPtr(ByRef arr As Variant) As LongPtr
 ' Returns vbNullPtr for an unallocated array.
-' Replacing ArrPtr(arr) with inline code makes routine 2x faster.
+' ArrPtr and PeekPtr are written inline: one save and restore of the construct
+' instead of two procedure calls, each with its own (2x faster).
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
-    If psa <> vbNullPtr Then
-        ArrDataPtr = PeekPtr(psa + vbOffsetArraypvData)
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
     End If
+    Dim psa As LongPtr: psa = this.Pointers(0)
+
+    ' The data pointer in the SafeArray, as in PeekPtr.
+    If psa <> vbNullPtr Then
+        this.MetaData.pvData = psa + vbOffsetArraypvData
+        ArrDataPtr = this.Pointers(0)
+    End If
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
 
 End Function
 
@@ -975,12 +1043,35 @@ End Function
 '@Description "Returns the number of dimensions of an array."
 Public Property Get ArrDims(ByRef arr As Variant) As Integer
 ' Returns 0 for an unallocated array.
-' Replacing ArrPtr(arr) with inline code makes routine 2x faster.
+' ArrPtr and PeekInt are written inline: one save and restore of the construct
+' instead of two procedure calls, each with its own (2x faster).
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
-    If psa <> vbNullPtr Then
-        ArrDims = PeekInt(psa + vbOffsetArraycDims)
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
     End If
+    Dim psa As LongPtr: psa = this.Pointers(0)
+
+    ' The number of dimensions in the SafeArray, as in PeekInt.
+    If psa <> vbNullPtr Then
+        this.MetaData.pvData = psa + vbOffsetArraycDims
+        ArrDims = this.Integers(0)
+    End If
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
 
 End Property
 
@@ -988,12 +1079,35 @@ End Property
 '@Description "Returns the memory size of an element of an array."
 Public Property Get ArrElemSize(ByRef arr As Variant) As Long
 ' Returns 0 for an unallocated array.
-' Replacing ArrPtr(arr) with inline code makes routine 2x faster.
+' ArrPtr and PeekLng are written inline: one save and restore of the construct
+' instead of two procedure calls, each with its own (2x faster).
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
-    If psa <> vbNullPtr Then
-        ArrElemSize = PeekLng(psa + vbOffsetArraycbElements)
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
     End If
+    Dim psa As LongPtr: psa = this.Pointers(0)
+
+    ' The element size in the SafeArray, as in PeekLng.
+    If psa <> vbNullPtr Then
+        this.MetaData.pvData = psa + vbOffsetArraycbElements
+        ArrElemSize = this.Longs(0)
+    End If
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
 
 End Property
 
@@ -1001,12 +1115,35 @@ End Property
 '@Description "Returns True if an array is static or False otherwise."
 Public Property Get IsArrayStatic(ByRef arr As Variant) As Boolean
 ' Returns False for an unallocated array.
-' Replacing ArrPtr(arr) with inline code makes routine 2x faster.
+' ArrPtr and PeekInt are written inline: one save and restore of the construct
+' instead of two procedure calls, each with its own (2x faster).
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
-    If psa <> vbNullPtr Then
-        IsArrayStatic = (PeekInt(psa + vbOffsetArrayfFeatures) And FADF_STATIC) = FADF_STATIC
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
     End If
+    Dim psa As LongPtr: psa = this.Pointers(0)
+
+    ' The features flags in the SafeArray, as in PeekInt.
+    If psa <> vbNullPtr Then
+        this.MetaData.pvData = psa + vbOffsetArrayfFeatures
+        IsArrayStatic = (this.Integers(0) And FADF_STATIC) = FADF_STATIC
+    End If
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
 
 End Property
 
@@ -1014,10 +1151,28 @@ End Property
 '@Description "Returns True if an array is allocated or False otherwise."
 Public Property Get IsArrayAllocated(ByRef arr As Variant) As Boolean
 ' An array is allocated if it has an allocated SafeArray.
-' Replacing ArrPtr(arr) with inline code makes routine 2x faster.
+' ArrPtr is written inline: no procedure call (2x faster).
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
-    IsArrayAllocated = psa <> vbNullPtr
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+    End If
+    IsArrayAllocated = this.Pointers(0) <> vbNullPtr
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
 
 End Property
 
@@ -1027,22 +1182,47 @@ Public Property Get IsArrayEmpty(ByRef arr As Variant) As Boolean
 ' Returns True for an unallocated array and for an allocated array without data.
 ' see https://www.cpearson.com/Excel/IsArrayAllocated.aspx
 ' This version also works for multidimensional arrays.
+' ArrPtr, PeekInt and PeekLng are written inline: one save and restore of the
+' construct instead of a procedure call for every value. No Exit Property
+' between the save and the restore.
 
-    Dim psa As LongPtr: psa = ArrPtr(arr)
+    If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
+
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    Dim Count As Long: Count = this.MetaData.cElements
+    Dim Data As LongPtr: Data = this.MetaData.pvData
+    this.MetaData.cElements = 1
+
+    ' The address of the SafeArray, as in ArrPtr.
+    this.MetaData.pvData = VarPtr(arr)
+    If (this.Integers(0) And VT_BYREF) = VT_BYREF Then
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+        this.MetaData.pvData = this.Pointers(0)
+    Else
+        this.MetaData.pvData = this.MetaData.pvData + vbOffsetVariantData
+    End If
+    Dim psa As LongPtr: psa = this.Pointers(0)
+
     If psa = vbNullPtr Then
         IsArrayEmpty = True
-        Exit Property
+    Else
+        ' An array is empty if any of its dimensions has no elements.
+        this.MetaData.pvData = psa + vbOffsetArraycDims
+        Dim NDims As Long: NDims = this.Integers(0)
+        Dim n As Long
+        For n = 0 To NDims - 1
+            this.MetaData.pvData = psa + vbOffsetArrayrgsaBound + 2 * vbSizeLong * n
+            If this.Longs(0) = 0 Then
+                IsArrayEmpty = True
+                Exit For
+            End If
+        Next
     End If
-    
-    ' An array is empty if any of its dimensions has no elements.
-    Dim n As Long
-    For n = 0 To PeekInt(psa + vbOffsetArraycDims) - 1
-        If PeekLng(psa + vbOffsetArrayrgsaBound + 2 * vbSizeLong * n) = 0 Then
-            IsArrayEmpty = True
-            Exit Property
-        End If
-    Next
-    
+
+    this.MetaData.cElements = Count
+    this.MetaData.pvData = Data
+
 End Property
 
 
@@ -1508,7 +1688,9 @@ Public Function DumpMem( _
 ) As String
 ' After Karl E. Peterson - see http://www.mvps.org/vb.
 ' Here the dump is written to a string buffer which avoids intermediate string
-' allocations and thus makes the code faster for (larger) memory dumps.
+' allocations and thus makes the code faster for (larger) memory dumps. The
+' length of the dump is known beforehand, so the buffer is allocated once and
+' filled with the Mid$ statement. Every line ends with a vbCrLf of 2 characters.
 
     ' Check the validity of the arguments.
     If NBytes <= 0 Then Exit Function
@@ -1531,22 +1713,24 @@ Public Function DumpMem( _
     #Else
         Const AddressDigits As Long = 8
     #End If
-    
-    ' Initialize the buffer with 3 extra lines and 1 extra character per line.
+
+    ' Initialize the buffer with 3 extra lines and 2 extra characters per line,
+    ' for the vbCrLf at the end of every line.
     Dim Width As Long: Width = AddressDigits + 1 + 6 + 3 * NBytesPerLine + 1 + NBytesPerLine
     Dim Points As String: Points = String$(NBytesPerLine, ".")
-    Dim Buffer As String: Buffer = Space$((NLines + 3) * (Width + 1))
+    Dim Buffer As String: Buffer = Space$((NLines + 3) * (Width + 2))
     Dim index As Long: index = 1
 
     ' Write the header to the buffer.
     Mid$(Buffer, index) = String$(Width, "=") & VBA.vbCrLf
-    index = index + Width + 1
+    index = index + Width + 2
 
-    ' Write the information line to the buffer.
+    ' Write the information line to the buffer, with the number of bytes at the
+    ' right, just before the vbCrLf.
     Mid$(Buffer, index) = "Memory address = &h" & Hex$(address)
-    index = index + Width + 1
-    Dim Info As String: Info = "# bytes = " & NBytes & VBA.vbCrLf
-    Mid$(Buffer, index - Len(Info) + 1) = Info
+    index = index + Width + 2
+    Dim Info As String: Info = "# bytes = " & NBytes
+    Mid$(Buffer, index - 2 - Len(Info)) = Info & VBA.vbCrLf
 
     ' Loop and write the memory dump to the buffer.
     Dim n As Long, i As Long
@@ -1581,7 +1765,7 @@ Public Function DumpMem( _
 
         ' Write newline.
         Mid$(Buffer, index) = VBA.vbCrLf
-        index = index + 1
+        index = index + 2
     Next
 
     ' Write the footer to the buffer.
@@ -1592,8 +1776,8 @@ Public Function DumpMem( _
     If n <> 0 Then
         ' Number of bytes for which information needs to be erased.
         n = NBytesPerLine - n
-        Mid$(Buffer, index - 1 - n) = Space$(n)
-        Mid$(Buffer, index - 1 - NBytesPerLine - 1 - 3 * n) = Space$(3 * n)
+        Mid$(Buffer, index - 2 - n) = Space$(n)
+        Mid$(Buffer, index - 2 - NBytesPerLine - 1 - 3 * n) = Space$(3 * n)
     End If
 
     DumpMem = Buffer
@@ -1716,18 +1900,24 @@ End Function
 '@Description "Returns the position of an item in a VB Collection specified by its key."
 Public Function CollPos( _
     ByVal coll As Collection, _
-    ByRef key As String _
+    ByRef key As Variant _
 ) As Long
 ' Returns 0 if no Collection item with a given key exists.
-' Byref is used for speed. ByVal makes a unnecessary copy of the string.
+' ByRef Variant: no copy of the string, and any variable can be passed (a ByRef
+' String gives a compile error for a Variant variable).
+' A key that is not a String is converted to text: 3 is the key "3", not the
+' third item (Collection.Item takes a number as a position). Null raises
+' error 94.
 
     If coll.Count = 0 Then Err.Raise vbErrorInvalidProcedureCall, , "Collection is empty"
 
+    If this.MetaData.cDims = 0 Then InitializeConstruct
+
+    ' With the key tree the node of the key is found in O(log n) steps
+    ' (CollNode); without it the linked list is traversed in O(n) steps.
 #If CollectionTree And Win64 Then
     Dim NodePtr As LongPtr: NodePtr = CollNode(coll, key)
     If NodePtr = vbNullPtr Then Exit Function
-
-    If this.MetaData.cDims = 0 Then InitializeConstruct
 
     Dim Count As Long: Count = this.MetaData.cElements
     Dim Data As LongPtr: Data = this.MetaData.pvData
@@ -1745,8 +1935,6 @@ Public Function CollPos( _
 #Else
     If KeyExists(coll, key) = False Then Exit Function
 
-    If this.MetaData.cDims = 0 Then InitializeConstruct
-
     Dim Count As Long: Count = this.MetaData.cElements
     Dim Data As LongPtr: Data = this.MetaData.pvData
     ' Traverse the double linked list until a matching key has been found.
@@ -1756,7 +1944,8 @@ Public Function CollPos( _
     For i = 1 To coll.Count
         NodePtr = this.Pointers(0)
         this.MetaData.pvData = NodePtr + vbOffsetCollectionKey
-        ' Collection Keys are compared as case-insensitive.
+        ' Collection Keys are compared as case-insensitive; StrComp converts a
+        ' key that is not a String to text.
         If StrComp(this.Strings(0), key, VBA.vbTextCompare) = 0 Then
             CollPos = i
             Exit For
@@ -1786,6 +1975,8 @@ Public Property Let CollItem( _
     Dim Data As LongPtr: Data = this.MetaData.pvData
     ' Traverse the double linked list until a matching item has been found.
     If VBA.VarType(index) = VBA.vbString Then
+        ' With the key tree the node of the key is found in O(log n) steps
+        ' (CollNode); without it the linked list is traversed in O(n) steps.
 #If CollectionTree And Win64 Then
         Dim i As Long, NodePtr As LongPtr
         NodePtr = CollNode(coll, CStr(index))
@@ -1912,9 +2103,12 @@ Private Sub PokeSafeArray(ByVal address As LongPtr, ByRef value As SAFEARRAY)
 End Sub
 
 
+' CollNode descends the red-black tree of the keys in O(log n) steps; without
+' the tree (#Const CollectionTree = False or x86) KeyExists and a traversal of
+' the linked list take its place.
 #If CollectionTree And Win64 Then
 '@Description "Returns the node address of a key in a VB Collection or vbNullPtr if not found."
-Private Function CollNode(ByVal coll As Collection, ByRef key As String) As LongPtr
+Private Function CollNode(ByVal coll As Collection, ByRef key As Variant) As LongPtr
 ' The keyed nodes of a Collection form a red-black tree in vbTextCompare order of
 ' the keys. A descent from the root finds the node in O(log n) steps.
 
@@ -1949,14 +2143,17 @@ End Function
 #End If
 
 
+' KeyExists is only needed without the key tree: it checks a key with
+' Collection.Item and an error trap, before the linked list is traversed.
+#If Not (CollectionTree And Win64) Then
 '@Description "Returns True if a key exists in a VB Collection or False otherwise."
-Private Function KeyExists(ByVal coll As Collection, ByRef key As String) As Boolean
-' Without the red-black tree an error trap is required to check whether a key exists.
-' Byref is used for speed. ByVal makes a unnecessary copy of the string.
+Private Function KeyExists(ByVal coll As Collection, ByVal key As String) As Boolean
+' Without the red-black tree an error trap is required to check whether a key
+' exists; with the tree CollPos and CollItem use CollNode instead.
+' ByVal String: the key is always text, so Collection.Item looks for a key
+' and not for a position (it takes a number as a position); the copy of the
+' key costs little next to the error trap.
 
-#If CollectionTree And Win64 Then
-    KeyExists = CollNode(coll, key) <> vbNullPtr
-#Else
     On Error GoTo ErrorHandler
     coll.Item key
     KeyExists = True
@@ -1971,6 +2168,6 @@ ErrorHandler:
     Case Else
         Err.Raise Err.Number
     End Select
-#End If
 
 End Function
+#End If
