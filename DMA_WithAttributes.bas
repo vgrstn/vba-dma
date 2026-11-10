@@ -54,8 +54,8 @@ Option Explicit
 ' for memory access, which is faster than the more common Variant ByRef method,
 ' mainly because the latter requires at least one extra stack frame for each
 ' memory access. see: https://github.com/cristianbuse/VBA-MemoryTools.
-' Contrary to Christian Buse's LibMemory, the PeekPoke uses one construct common
-' to all methods whilst taking extra measures to allow for nested calls.
+' Contrary to Christian Buse's LibMemory, the DMA module uses one construct
+' common to all methods whilst taking measures to allow for nested calls.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Methods for peeking and poking intrinsic variables
@@ -156,8 +156,7 @@ Option Explicit
 ' IsArrayEmpty  0.146         0.100         0.144         0.112
 '
 ' ArrDataPtr, ArrDims and IsArrayEmpty read the SafeArray inline, within one
-' save and restore of the construct (no call of ArrPtr and Peek), so they cost
-' little more than ArrPtr itself.
+' save and restore of the construct, so costing little more than ArrPtr itself.
 '
 ' MidArr for Long(1 To Length) (µs per call)
 ' Length   Get MidArr      For loop    Let MidArr      For loop
@@ -168,8 +167,8 @@ Option Explicit
 ' 10,000        2.032       115.876         3.984       151.566
 ' 100,000      39.644      1135.267        35.211      1522.389
 '
-' MidArr outperforms for loop for simple types like Long. MidArr as well as a
-' For loop take significant longer for complex types i.e. Strings and Variants.
+' MidArr outperforms For Loop for simple types like Long. MidArr as well as a
+' For Loop take significant longer for complex types i.e. Strings and Variants.
 
 ''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''''
 ' Methods for memory blocks
@@ -376,26 +375,26 @@ End Enum
 
 ' A Variant, from VarPtr(var).
 Private Enum VARIANTOFFSET
-    vbOffsetVariantType = 0             ' type (Integer)
-    vbOffsetVariantDecimal = 2          ' data (Decimal only - 14 bytes)
-    vbOffsetVariantData = 8             ' data or *data (LongPtr)
+    vbOffsetVariantType = 0         ' type (Integer)
+    vbOffsetVariantDecimal = 2      ' data (Decimal only - 14 bytes)
+    vbOffsetVariantData = 8         ' data or *data (LongPtr)
 End Enum
 
 ' A BSTR, from StrPtr(var).
 Private Enum BSTROFFSET
-    vbOffsetStringLenB = -4             ' number of bytes (Long) (= LenB)
+    vbOffsetStringLenB = -4         ' number of bytes (Long) (= LenB)
 End Enum
 
 ' A SafeArray, from ArrPtr(var).
 Private Enum SAFEARRAYOFFSET
-    vbOffsetArrayType = -4              ' VarType (Long) for FADF_HAVEVARTYPE = 1
-    vbOffsetArraycDims = 0              ' number of dimensions (Integer)
-    vbOffsetArrayfFeatures = 2          ' flags (Integer)
-    vbOffsetArraycbElements = 4         ' element size (Long)
-    vbOffsetArraycLocks = 8             ' lock count (Long)
+    vbOffsetArrayType = -4          ' VarType (Long) for FADF_HAVEVARTYPE = 1
+    vbOffsetArraycDims = 0          ' number of dimensions (Integer)
+    vbOffsetArrayfFeatures = 2      ' flags (Integer)
+    vbOffsetArraycbElements = 4     ' element size (Long)
+    vbOffsetArraycLocks = 8         ' lock count (Long)
 #If Win64 Then
-    vbOffsetArraypvData = 16            ' *data (LongPtr); bytes 12-15 are not used
-    vbOffsetArrayrgsaBound = 24         ' cElements, lLbound pairs (Long())
+    vbOffsetArraypvData = 16        ' *data (LongPtr); bytes 12-15 are not used
+    vbOffsetArrayrgsaBound = 24     ' cElements, lLbound pairs (Long())
 #Else
     vbOffsetArraypvData = 12
     vbOffsetArrayrgsaBound = 16
@@ -404,14 +403,14 @@ End Enum
 
 ' A VB Collection, from ObjPtr(coll).
 Private Enum COLLECTIONOFFSET
-    vbOffsetCollectionvTable = 0        ' *vTable (see COM)
+    vbOffsetCollectionvTable = 0    ' *vTable (see COM)
 #If Win64 Then
-    vbOffsetCollectionnRef = 24         ' reference count (Long)
-    vbOffsetCollectionCount = 28        ' number of items (Long)
-    vbOffsetCollectionHead = 40         ' *first node (LongPtr)
-    vbOffsetCollectionTail = 48         ' *last node (LongPtr)
-    vbOffsetCollectionRoot = 64         ' *root node of the key tree (LongPtr)
-    vbOffsetCollectionNil = 72          ' *nil node of the key tree (LongPtr)
+    vbOffsetCollectionnRef = 24     ' reference count (Long)
+    vbOffsetCollectionCount = 28    ' number of items (Long)
+    vbOffsetCollectionHead = 40     ' *first node (LongPtr)
+    vbOffsetCollectionTail = 48     ' *last node (LongPtr)
+    vbOffsetCollectionRoot = 64     ' *root node of the key tree (LongPtr)
+    vbOffsetCollectionNil = 72      ' *nil node of the key tree (LongPtr)
 #Else
     vbOffsetCollectionnRef = 12
     vbOffsetCollectionCount = 16
@@ -428,14 +427,14 @@ End Enum
 ' linked list in insertion order; the nodes with a key also form a red-black
 ' tree.
 Private Enum COLLECTIONNODEOFFSET
-    vbOffsetCollectionItem = 0          ' item (Variant)
+    vbOffsetCollectionItem = 0      ' item (Variant)
 #If Win64 Then
-    vbOffsetCollectionKey = 24          ' *key (LongPtr)
-    vbOffsetCollectionPrev = 32         ' *previous node (LongPtr)
-    vbOffsetCollectionNext = 40         ' *next node (LongPtr)
-    vbOffsetCollectionParent = 48       ' *parent in the key tree (LongPtr)
-    vbOffsetCollectionRight = 56        ' *right child in the key tree (LongPtr)
-    vbOffsetCollectionLeft = 64         ' *left child in the key tree (LongPtr)
+    vbOffsetCollectionKey = 24      ' *key (LongPtr)
+    vbOffsetCollectionPrev = 32     ' *previous node (LongPtr)
+    vbOffsetCollectionNext = 40     ' *next node (LongPtr)
+    vbOffsetCollectionParent = 48   ' *parent in the key tree (LongPtr)
+    vbOffsetCollectionRight = 56    ' *right child in the key tree (LongPtr)
+    vbOffsetCollectionLeft = 64     ' *left child in the key tree (LongPtr)
 #Else
     vbOffsetCollectionKey = 16
     vbOffsetCollectionPrev = 20
@@ -894,11 +893,10 @@ End Function
 Public Sub PokeStr(ByVal address As LongPtr, ByRef value As Variant)
 Attribute PokeStr.VB_Description = "Copies a String to a memory address."
 ' Address is a BSTR address (StrPtr).
-' ByRef Variant: no copy of the string, and any variable can be passed (a ByRef
-' String gives a compile error for a Variant variable).
-' A value that is not a String is converted to text by LSet, as CStr does: 42
-' becomes "42", 1.5 becomes "1,5" with a comma as decimal separator. Null
-' raises error 94, an object or an array error 13. Like the other Poke
+' ByRef Variant: no copy of the string, and any variable can be passed.
+'
+' A value that is not a String is converted to text by LSet, as CStr does.
+' Null raises error 94, an object or an array error 13. Like the other Poke
 ' routines, the value is not checked. As with LSet, the text is padded with
 ' spaces or cut off to the length of the BSTR at the address.
 
@@ -1004,8 +1002,9 @@ End Function
 Public Function ArrDataPtr(ByRef arr As Variant) As LongPtr
 Attribute ArrDataPtr.VB_Description = "Returns the address of the stored data of an array."
 ' Returns vbNullPtr for an unallocated array.
+'
 ' ArrPtr and PeekPtr are written inline: one save and restore of the construct
-' instead of two procedure calls, each with its own (2x faster).
+' instead of two procedure calls, which makes ArrDataPtr 2x faster.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1040,8 +1039,9 @@ End Function
 Public Property Get ArrDims(ByRef arr As Variant) As Integer
 Attribute ArrDims.VB_Description = "Returns the number of dimensions of an array."
 ' Returns 0 for an unallocated array.
+'
 ' ArrPtr and PeekInt are written inline: one save and restore of the construct
-' instead of two procedure calls, each with its own (2x faster).
+' instead of two procedure calls, which makes ArrDims 2x faster.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1076,8 +1076,9 @@ End Property
 Public Property Get ArrElemSize(ByRef arr As Variant) As Long
 Attribute ArrElemSize.VB_Description = "Returns the memory size of an element of an array."
 ' Returns 0 for an unallocated array.
+'
 ' ArrPtr and PeekLng are written inline: one save and restore of the construct
-' instead of two procedure calls, each with its own (2x faster).
+' instead of two procedure calls, which makes ArrElemSize 2x faster.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1112,8 +1113,9 @@ End Property
 Public Property Get IsArrayStatic(ByRef arr As Variant) As Boolean
 Attribute IsArrayStatic.VB_Description = "Returns True if an array is static or False otherwise."
 ' Returns False for an unallocated array.
+'
 ' ArrPtr and PeekInt are written inline: one save and restore of the construct
-' instead of two procedure calls, each with its own (2x faster).
+' instead of two procedure calls, which makes IsArrayStatic 2x faster.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1148,7 +1150,9 @@ End Property
 Public Property Get IsArrayAllocated(ByRef arr As Variant) As Boolean
 Attribute IsArrayAllocated.VB_Description = "Returns True if an array is allocated or False otherwise."
 ' An array is allocated if it has an allocated SafeArray.
-' ArrPtr is written inline: no procedure call (2x faster).
+'
+' ArrPtr is written inline: no procedure call, which makes IsArrayAllocated
+' 2x faster.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1179,9 +1183,9 @@ Attribute IsArrayEmpty.VB_Description = "Returns True if an array is empty or Fa
 ' Returns True for an unallocated array and for an allocated array without data.
 ' see https://www.cpearson.com/Excel/IsArrayAllocated.aspx
 ' This version also works for multidimensional arrays.
+'
 ' ArrPtr, PeekInt and PeekLng are written inline: one save and restore of the
-' construct instead of a procedure call for every value. No Exit Property
-' between the save and the restore.
+' construct instead of a procedure call for every value.
 
     If VBA.IsArray(arr) = False Then Err.Raise vbErrorTypeMismatch
 
@@ -1230,9 +1234,11 @@ Public Function CreateArray( _
 Attribute CreateArray.VB_Description = "Returns a created variant/array of specified dimensions."
 ' CreateArray provides a solution for creating an array when its (number of)
 ' dimensions and type are determined during run time. See the Select Case
-' below for valid options for specifying the array dimensions. CreateArray
-' can also be used for creating empty typed arrays. If no optional arguments
-' an unallocated array is returned, which can be allocated later with Redim.
+' below for valid options for specifying the array dimensions.
+'
+' CreateArray can also be used for creating empty typed arrays. Without optional
+' arguments an unallocated typed array is returned, which can be allocated later
+' with Redim.
 
     vt = vt And VT_TYPEMASK
 
@@ -2098,9 +2104,6 @@ Attribute PokeSafeArray.VB_Description = "Copies a SafeArray structure to a memo
 End Sub
 
 
-' CollNode descends the red-black tree of the keys in O(log n) steps; without
-' the tree (#Const CollectionTree = False or x86) KeyExists and a traversal of
-' the linked list take its place.
 #If CollectionTree And Win64 Then
 Private Function CollNode(ByVal coll As Collection, ByRef key As Variant) As LongPtr
 Attribute CollNode.VB_Description = "Returns the node address of a key in a VB Collection or vbNullPtr if not found."
@@ -2138,8 +2141,6 @@ End Function
 #End If
 
 
-' KeyExists is only needed without the key tree: it checks a key with
-' Collection.Item and an error trap, before the linked list is traversed.
 #If Not (CollectionTree And Win64) Then
 Private Function KeyExists(ByVal coll As Collection, ByVal key As String) As Boolean
 Attribute KeyExists.VB_Description = "Returns True if a key exists in a VB Collection or False otherwise."
